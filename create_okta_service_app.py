@@ -51,10 +51,13 @@ def create_okta_service_app(env_path):
 	print(f'\n///////////////// Setting CLIENT_ID in .env:\n \n{client_id}')
 	dotenv.set_key(env_path, 'CLIENT_ID', client_id)
 
-	grant_scopes_in_service_app(okta_url, api_key, client_id)
+	scopes = os.environ.get('SCOPES').split()
 
-def grant_scopes_in_service_app(okta_url, api_key, client_id):
-	scope = os.environ.get('SCOPES')
+	for scope in scopes:
+		grant_scopes_in_service_app(okta_url, api_key, client_id, scope)
+
+def grant_scopes_in_service_app(okta_url, api_key, client_id, scope):
+
 	conn = http.client.HTTPSConnection(okta_url[8:])
 	payload = {
 		'issuer': okta_url,
