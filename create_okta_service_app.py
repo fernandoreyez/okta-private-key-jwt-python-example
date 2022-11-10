@@ -1,19 +1,25 @@
-import http.client
+import aiohttp
+import asyncio
 import pprint
 import os
 import dotenv
 import json
 
 pp = pprint.PrettyPrinter(indent=4)
-
-def create_okta_service_app(env_path):
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+dotenv.load_dotenv(dotenv_path)
+ 
+async def main():
 	okta_url = os.environ.get('OKTA_URL')
 	modulus = os.environ.get('MODULUS')
 	api_key = os.environ.get('API_KEY')
+ 
+	print("Enter a name for your application:")
+	app_name = input()
 
-	conn = http.client.HTTPSConnection(okta_url[8:])
+	# conn = http.client.HTTPSConnection(okta_url[8:])
 	payload = {
-		'client_name': 'Private Key JWT Service App',
+		'client_name': app_name or 'Private Key JWT Service App',
 		'response_types': [
 			'token'
 		],
@@ -40,25 +46,25 @@ def create_okta_service_app(env_path):
 		'Content-Type': 'application/json',
 		'Authorization': f'SSWS {api_key}'
 	}
-	conn.request('POST', '/oauth2/v1/clients', json.dumps(payload), headers)
-	res = conn.getresponse()
-	data = res.read()
+	async with aiohttp.ClientSession() as session:
+		async with session.post(okta_url + '/oauth2/v1/clients',
+                         json=payload, headers=headers) as resp:
+			res = await resp.json()
 
 	print('\n///////////////// Okta Service app created: \n \n')
-	pp.pprint(json.loads(data))
+	pp.pprint(res)
 
-	client_id = json.loads(data)['client_id']
-	print(f'\n///////////////// Setting CLIENT_ID in .env:\n \n{client_id}')
-	dotenv.set_key(env_path, 'CLIENT_ID', client_id)
+	client_id = res['client_id']
+
+	print(f'\n///////////////// Setting CLIENT_ID in .env: {client_id}')
+	dotenv.set_key(dotenv_path, 'CLIENT_ID', client_id)
 
 	scopes = os.environ.get('SCOPES').split()
 
 	for scope in scopes:
-		grant_scopes_in_service_app(okta_url, api_key, client_id, scope)
+		await grant_scopes_in_service_app(okta_url, api_key, client_id, scope)
 
-def grant_scopes_in_service_app(okta_url, api_key, client_id, scope):
-
-	conn = http.client.HTTPSConnection(okta_url[8:])
+async def grant_scopes_in_service_app(okta_url, api_key, client_id, scope):
 	payload = {
 		'issuer': okta_url,
 		'scopeId': scope
@@ -68,14 +74,13 @@ def grant_scopes_in_service_app(okta_url, api_key, client_id, scope):
 		'Content-Type': 'application/json',
 		'Authorization': f'SSWS {api_key}'
 	}
-	conn.request('POST', f'/api/v1/apps/{client_id}/grants', json.dumps(payload), headers)
-	res = conn.getresponse()
-	data = res.read()
 
-	print('\n///////////////// Scopes granted: \n \n')
-	pp.pprint(json.loads(data))
+	async with aiohttp.ClientSession() as session:
+		async with session.post(okta_url + f'/api/v1/apps/{client_id}/grants',
+                         json=payload, headers=headers) as resp:
+			res = await resp.json()
 
-if __name__ == '__main__':
-	dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-	dotenv.load_dotenv(dotenv_path)
-	create_okta_service_app(dotenv_path)
+	print('\n///////////////// Scopes granted:\n')
+	pp.pprint(res)
+
+asyncio.run(main())
